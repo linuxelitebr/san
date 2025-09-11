@@ -2,50 +2,50 @@
 
 ## Overview
 
-This document describes a chronic Fibre Channel (FC) connectivity issue observed in OpenShift/Kubernetes clusters using Hitachi storage arrays. The problem manifests as intermittent loss of storage connectivity requiring manual intervention to restore service.
+This document describes a Fibre Channel (FC) connectivity issue observed in OpenShift/Kubernetes clusters using Hitachi storage arrays.  
+The problem occurs **only on nodes that have not yet had any LUN mapped**. Once a LUN has been successfully mapped, no intermittent connectivity losses are observed.
 
 ## Problem Description
 
-Nodes in the cluster periodically lose connectivity to Hitachi storage volumes over Fibre Channel connections. When this occurs, affected nodes cannot access persistent volumes, causing pod failures and service disruptions.
+When a new node in the cluster has no LUNs previously mapped, it may fail to establish initial connectivity with Hitachi storage volumes over Fibre Channel connections.  
+This prevents the node from accessing persistent volumes until manual intervention is performed.
 
 ### Symptoms
 
-- Persistent Volume Claims (PVCs) fail to mount on affected nodes
-- Running pods experience I/O errors when accessing storage
-- New pods remain in `ContainerCreating` state indefinitely
-- Multipath shows failed or offline paths to storage
+- Persistent Volume Claims (PVCs) fail to mount on newly added nodes
+- New pods scheduled on these nodes remain in `ContainerCreating` state indefinitely
+- Multipath shows no active paths until connectivity is established
 - FC remote ports appear stale or disconnected
-- SCSI devices become unresponsive despite appearing present in the system
+- SCSI devices do not register until a manual rescan or reset is triggered
 
 ### Impact
 
-- Application downtime due to storage unavailability
+- Applications cannot start on nodes without mapped LUNs
 - Pod scheduling failures on affected nodes
-- Manual intervention required to restore service
-- Potential data corruption if writes are interrupted
+- Manual intervention required to initialize storage connectivity
 
 ## Root Cause
 
-The issue appears to stem from FC port negotiation failures between the Host Bus Adapter (HBA) and the Hitachi storage array. The exact trigger is intermittent but results in:
-
-1. Loss of FC fabric connectivity
-2. Stale SCSI device entries
-3. Multipath path failures
-4. Inability to recover automatically
+The issue appears to stem from FC port negotiation failures between the Host Bus Adapter (HBA) and the Hitachi storage array during the **first LUN mapping event on a node**.  
+After a successful mapping, the node maintains stable connectivity with no further issues.
 
 ## Current Workarounds
 
-Operations teams typically resolve this issue through one of two methods:
+Operations teams can resolve this issue through one of two methods:
 
 ### Option 1: HBA Port Reset
+
 Force a Fibre Channel Link Initialization Protocol (LIP) to renegotiate the connection:
+
 ```bash
 echo 1 > /sys/class/fc_host/host*/issue_lip
 echo "- - -" > /sys/class/scsi_host/host*/scan
 ```
 
 ### Option 2: Node Reboot
+
 Complete node restart to fully reinitialize all storage paths:
+
 ```bash
 systemctl reboot
 ```
@@ -58,22 +58,10 @@ systemctl reboot
 - **Platforms**: OpenShift 4.x, Kubernetes 1.2x+
 - **HBA Vendors**: Emulex (lpfc driver), QLogic (qla2xxx driver)
 
-## Frequency
-
-The issue occurs intermittently with varying frequency:
-- Some environments: Daily
-- Others: Weekly or monthly
-- Triggers appear random with no clear pattern
-
-## Business Impact
-
-- **Service Availability**: Applications experience downtime
-- **Operational Overhead**: Requires 24/7 manual intervention
-- **SLA Risk**: Potential for extended outages if not promptly addressed
-
 ## Permanent Resolution
 
 A permanent fix requires investigation at multiple levels:
+
 - Storage array firmware updates
 - HBA driver/firmware updates  
 - FC switch configuration review
@@ -81,12 +69,6 @@ A permanent fix requires investigation at multiple levels:
 
 Until a root cause fix is implemented, operational workarounds are necessary to maintain service availability.
 
-## References
-
-- Red Hat Solution Article: [FC connectivity issues with Hitachi storage]
-- Hitachi Technical Bulletin: [FC path stability recommendations]
-- HBA Vendor Advisory: [Driver compatibility matrix]
-
 ---
 
-*Note: This is a known issue affecting initial LUN discovery from Hitachi storage arrays. While the workaround is effective and permanent for each LUN, it prevents full automation of storage provisioning workflows.*
+*Note: This is a known issue affecting only initial LUN discovery on nodes without previously mapped LUNs. Once the first LUN is successfully mapped, connectivity remains stable with no intermittent losses.*
