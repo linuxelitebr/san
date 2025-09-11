@@ -181,6 +181,7 @@ for node in $nodes; do
           [ -f "$host/port_state" ] && echo "  Port State: $(cat $host/port_state 2>/dev/null)"
           [ -f "$host/speed" ] && echo "  Speed: $(cat $host/speed 2>/dev/null)"
         fi
+      for host in /sys/class/fc_host/host*; do echo 1 > /sys/class/fc_host/$(basename $host)/issue_lip ; done
       done
       echo "Total FC hosts: $(ls -d /sys/class/fc_host/host* 2>/dev/null | wc -l)"
     else
