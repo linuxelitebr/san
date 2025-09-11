@@ -1,13 +1,13 @@
-# Hitachi FC Storage Connectivity Issue
+# SAN FC Storage Connectivity Issue
 
 ## Overview
 
-This document describes a Fibre Channel (FC) connectivity issue observed in OpenShift/Kubernetes clusters using Hitachi storage arrays.  
+This document describes a Fibre Channel (FC) connectivity issue observed in OpenShift/Kubernetes clusters using SAN storage arrays.  
 The problem occurs **only on nodes that have not yet had any LUN mapped**. Once a LUN has been successfully mapped, no intermittent connectivity losses are observed.
 
 ## Problem Description
 
-When a new node in the cluster has no LUNs previously mapped, it may fail to establish initial connectivity with Hitachi storage volumes over Fibre Channel connections.  
+When a new node in the cluster has no LUNs previously mapped, it may fail to establish initial connectivity with SAN storage volumes over Fibre Channel connections.  
 This prevents the node from accessing persistent volumes until manual intervention is performed.
 
 ### Symptoms
@@ -26,7 +26,7 @@ This prevents the node from accessing persistent volumes until manual interventi
 
 ## Root Cause
 
-The issue appears to stem from FC port negotiation failures between the Host Bus Adapter (HBA) and the Hitachi storage array during the **first LUN mapping event on a node**.  
+The issue appears to stem from FC port negotiation failures between the Host Bus Adapter (HBA) and the SAN storage array during the **first LUN mapping event on a node**.  
 After a successful mapping, the node maintains stable connectivity with no further issues.
 
 ## Current Workarounds
@@ -52,7 +52,7 @@ systemctl reboot
 
 ## Affected Components
 
-- **Storage Arrays**: Hitachi VSP series
+- **Storage Arrays**: SAN manufactures
 - **Protocols**: Fibre Channel (8Gb/16Gb/32Gb)
 - **Operating Systems**: RHEL 8.x/9.x, RHCOS
 - **Platforms**: OpenShift 4.x, Kubernetes 1.2x+
