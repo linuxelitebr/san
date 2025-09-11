@@ -89,4 +89,4 @@ Until a root cause fix is implemented, operational workarounds are necessary to 
 
 ---
 
-*Note: This is a known issue affecting multiple production environments. Contact your storage vendor for the latest recommendations.*
+*Note: This is a known issue affecting initial LUN discovery from Hitachi storage arrays. While the workaround is effective and permanent for each LUN, it prevents full automation of storage provisioning workflows.*
