@@ -71,4 +71,4 @@ Until a root cause fix is implemented, operational workarounds are necessary to 
 
 ---
 
-*Note: This is a known issue affecting only initial LUN discovery on nodes without previously mapped LUNs. Once the first LUN is successfully mapped, connectivity remains stable with no intermittent losses.*
+*Note: This is a known issue that only affects the initial discovery of LUNs on nodes without previously mapped LUNs. It is not tied to a specific manufacturer and has been observed across multiple vendors. Once the first LUN is successfully mapped, connectivity remains stable with no intermittent losses.*
