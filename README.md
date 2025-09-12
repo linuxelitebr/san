@@ -20,7 +20,7 @@ This prevents the node from accessing persistent volumes until manual interventi
 
 ### Impact
 
-- Applications cannot start on nodes without mapped LUNs
+- Applications that require persistent volumes cannot be started on nodes without mapped LUNs
 - Pod scheduling failures on affected nodes
 - Manual intervention required to initialize storage connectivity
 
