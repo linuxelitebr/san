@@ -6,7 +6,7 @@ set -euo pipefail
 # v0.2
 
 echo "=================================================================================="
-echo "FC Storage Test Script - Simplified"
+echo "FC Storage Test Script"
 echo "Cluster: $(oc whoami --show-server 2>/dev/null || echo 'Not logged in')"
 echo "User: $(oc whoami 2>/dev/null || echo 'Not logged in')"
 echo "Date: $(date)"
