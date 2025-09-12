@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Script: FC Storage Test for OpenShift
 # Purpose: Test FC storage connectivity and PVC mounting across all nodes
-# v0.2
+# v0.3
 
 echo "=================================================================================="
 echo "FC Storage Test Script"
@@ -167,51 +167,8 @@ EOF
   echo ""
 done
 
-# Phase 2: FC Debug
-echo "=== PHASE 2: FC Diagnostics ==="
-for node in $nodes; do
-  echo "Checking FC on node: $node"
-
-  fc_output=$(oc debug node/$node -- chroot /host bash -c '
-    echo "=== FC Host Adapters ==="
-    if [ -d /sys/class/fc_host ]; then
-      for host in /sys/class/fc_host/host*; do
-        if [ -d "$host" ]; then
-          echo "$(basename $host):"
-          [ -f "$host/port_name" ] && echo "  Port Name: $(cat $host/port_name 2>/dev/null)"
-          [ -f "$host/port_state" ] && echo "  Port State: $(cat $host/port_state 2>/dev/null)"
-          [ -f "$host/speed" ] && echo "  Speed: $(cat $host/speed 2>/dev/null)"
-        fi
-      for host in /sys/class/fc_host/host*; do echo 1 > /sys/class/fc_host/$(basename $host)/issue_lip ; done
-      done
-      echo "Total FC hosts: $(ls -d /sys/class/fc_host/host* 2>/dev/null | wc -l)"
-    else
-      echo "No FC hosts found"
-    fi
-
-    echo ""
-    echo "=== Multipath Devices ==="
-    if command -v multipath >/dev/null 2>&1; then
-      multipath -ll | head -20
-    else
-      echo "Multipath not available"
-    fi
-  ' 2>&1)
-
-  if [[ $? -eq 0 ]]; then
-    echo "$fc_output" | head -30
-    fc_results+=("$node,SUCCESS")
-    echo "✓ FC check completed"
-  else
-    echo "✗ FC check failed"
-    fc_results+=("$node,FAILED")
-  fi
-  echo "----------------------------------------"
-  echo ""
-done
-
-# Phase 3: Test Pods
-echo "=== PHASE 3: Testing PVC Mounts ==="
+# Phase 2: Test Pods
+echo "=== PHASE 2: Testing PVC Mounts ==="
 for node in $nodes; do
   pvc_name="pvc-${node//./-}"
   pod_name="pod-${node//./-}"
@@ -308,6 +265,139 @@ EOF
 
   echo ""
 done
+
+# Phase 3: FC Debug
+echo "=== PHASE 3: FC Diagnostics ==="
+for node in $nodes; do
+  echo "Checking FC on node: $node"
+
+  fc_output=$(oc debug node/$node -- chroot /host bash -c '
+    echo "=== FC Host Adapters ==="
+    if [ -d /sys/class/fc_host ]; then
+      for host in /sys/class/fc_host/host*; do
+        if [ -d "$host" ]; then
+          echo "$(basename $host):"
+          [ -f "$host/port_name" ] && echo "  Port Name: $(cat $host/port_name 2>/dev/null)"
+          [ -f "$host/port_state" ] && echo "  Port State: $(cat $host/port_state 2>/dev/null)"
+          [ -f "$host/speed" ] && echo "  Speed: $(cat $host/speed 2>/dev/null)"
+        fi
+      for host in /sys/class/fc_host/host*; do echo 1 > /sys/class/fc_host/$(basename $host)/issue_lip ; done
+      done
+      echo "Total FC hosts: $(ls -d /sys/class/fc_host/host* 2>/dev/null | wc -l)"
+    else
+      echo "No FC hosts found"
+    fi
+
+    echo ""
+    echo "=== Multipath Devices ==="
+    if command -v multipath >/dev/null 2>&1; then
+      multipath -ll | head -20
+    else
+      echo "Multipath not available"
+    fi
+  ' 2>&1)
+
+  if [[ $? -eq 0 ]]; then
+    echo "$fc_output" | head -30
+    fc_results+=("$node,SUCCESS")
+    echo "✓ FC check completed"
+  else
+    echo "✗ FC check failed"
+    fc_results+=("$node,FAILED")
+  fi
+  echo "----------------------------------------"
+  echo ""
+done
+
+
+
+# Phase 4: Retry pods that timed out
+echo "=== PHASE 4: Retry Failed Pods ==="
+
+# Identify TIMEOUT pods
+timeout_pods=""
+for result in "${pod_results[@]}"; do
+  if [[ "$result" == *"TIMEOUT"* ]]; then
+    IFS=',' read -r node pod status <<< "$result"
+    timeout_pods="$timeout_pods $node"
+  fi
+done
+
+if [[ -n "$timeout_pods" ]]; then
+  echo "Found pods that timed out on nodes:$timeout_pods"
+  echo ""
+  read -p "Retry these pods? (y/N): " -n 1 -r
+  echo ""
+  
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Remove old results for retry nodes
+    new_pod_results=()
+    for result in "${pod_results[@]}"; do
+      if [[ "$result" != *"TIMEOUT"* ]]; then
+        new_pod_results+=("$result")
+      fi
+    done
+    pod_results=("${new_pod_results[@]}")
+    
+    # Retry each timeout node
+    for node in $timeout_pods; do
+      pvc_name="pvc-${node//./-}"
+      pod_name="pod-${node//./-}"
+      
+      echo "Retrying pod on node: $node"
+      
+      # Delete existing pod
+      oc delete pod $pod_name -n $NAMESPACE --ignore-not-found=true >/dev/null 2>&1
+      
+      # Recreate pod (mesmo código da Fase 3)
+      cat <<EOF | oc apply -n $NAMESPACE -f -
+      # ... mesmo YAML do pod ...
+EOF
+      
+      # Wait with increased timeout (120s)
+      echo "  Waiting for pod (120s timeout - extended)..."
+      timeout=120
+      elapsed=0
+      
+      # Repeat loop while
+      while [[ $elapsed -lt $timeout ]]; do
+      phase=$(oc get pod $pod_name -n $NAMESPACE -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+
+      if [[ "$phase" == "Running" ]]; then
+          echo "  ✓ Pod running"
+          sleep 3
+          echo "  Logs:"
+          oc logs $pod_name -n $NAMESPACE 2>/dev/null | sed 's/^/    /'
+          pod_results+=("$node,$pod_name,SUCCESS")
+          break
+      elif [[ "$phase" == "Failed" ]] || [[ "$phase" == "Error" ]]; then
+          echo "  ✗ Pod failed: $phase"
+          pod_results+=("$node,$pod_name,FAILED")
+          break
+      fi
+
+      sleep 5
+      elapsed=$((elapsed + 5))
+
+      if [[ $((elapsed % 15)) -eq 0 ]]; then
+          echo "    Still waiting... ($elapsed/$timeout seconds)"
+      fi
+      done
+
+     if [[ $elapsed -ge $timeout ]]; then
+     echo "  ✗ Timeout waiting for pod"
+     pod_results+=("$node,$pod_name,TIMEOUT")
+     fi      
+      
+       echo ""
+     done
+   else
+     echo "Skipping retry"
+   fi
+else
+  echo "No pods with timeout to retry"
+fi
+echo ""
 
 # Summary
 echo "=================================================================================="
