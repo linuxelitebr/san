@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Script: FC Storage Test for OpenShift
 # Purpose: Test FC storage connectivity and PVC mounting across all nodes
+# v0.2
 
 echo "=================================================================================="
 echo "FC Storage Test Script - Simplified"
@@ -18,7 +19,7 @@ if ! oc whoami &> /dev/null; then
     exit 1
 fi
 
-NAMESPACE="dummy"
+NAMESPACE="dummysan"
 SIZE="1Gi"
 
 # StorageClass selection logic
@@ -28,10 +29,10 @@ if [[ $# -ge 1 ]]; then
   echo "Using specified StorageClass: $STORAGECLASS"
 else
   echo "No StorageClass specified, looking for defaults..."
-  
+
   # Get all default storage classes (returns space-separated list)
   DEFAULT_SCS=$(oc get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' 2>/dev/null || echo "")
-  
+
   if [[ -z "$DEFAULT_SCS" ]]; then
     echo ""
     echo "ERROR: No default StorageClass found!"
@@ -46,11 +47,11 @@ else
     echo "  $0 ocs-storagecluster-ceph-rbd"
     exit 1
   fi
-  
+
   # Convert to array for easier handling
   IFS=' ' read -ra SC_ARRAY <<< "$DEFAULT_SCS"
   DEFAULT_COUNT=${#SC_ARRAY[@]}
-  
+
   if [[ $DEFAULT_COUNT -eq 1 ]]; then
     STORAGECLASS="${SC_ARRAY[0]}"
     echo "Found single default StorageClass: $STORAGECLASS"
@@ -61,7 +62,7 @@ else
       echo "  $((i+1)). ${SC_ARRAY[$i]}"
     done
     echo ""
-    
+
     # Use the first one by default
     STORAGECLASS="${SC_ARRAY[0]}"
     echo "Will use the first one: $STORAGECLASS"
@@ -128,16 +129,16 @@ echo ""
 
 # Arrays for tracking results
 declare -a pvc_results
-declare -a fc_results  
+declare -a fc_results
 declare -a pod_results
 
 # Phase 1: Create PVCs
 echo "=== PHASE 1: Creating PVCs ==="
 for node in $nodes; do
   pvc_name="pvc-${node//./-}"
-  
+
   echo "Creating PVC for node: $node"
-  
+
   cat <<EOF | oc apply -n $NAMESPACE -f -
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -170,7 +171,7 @@ done
 echo "=== PHASE 2: FC Diagnostics ==="
 for node in $nodes; do
   echo "Checking FC on node: $node"
-  
+
   fc_output=$(oc debug node/$node -- chroot /host bash -c '
     echo "=== FC Host Adapters ==="
     if [ -d /sys/class/fc_host ]; then
@@ -187,7 +188,7 @@ for node in $nodes; do
     else
       echo "No FC hosts found"
     fi
-    
+
     echo ""
     echo "=== Multipath Devices ==="
     if command -v multipath >/dev/null 2>&1; then
@@ -196,7 +197,7 @@ for node in $nodes; do
       echo "Multipath not available"
     fi
   ' 2>&1)
-  
+
   if [[ $? -eq 0 ]]; then
     echo "$fc_output" | head -30
     fc_results+=("$node,SUCCESS")
@@ -214,26 +215,26 @@ echo "=== PHASE 3: Testing PVC Mounts ==="
 for node in $nodes; do
   pvc_name="pvc-${node//./-}"
   pod_name="pod-${node//./-}"
-  
+
   # Check PVC status
   if ! oc get pvc $pvc_name -n $NAMESPACE >/dev/null 2>&1; then
     echo "Skipping $node - PVC not found"
     pod_results+=("$node,$pod_name,NO_PVC")
     continue
   fi
-  
+
   pvc_phase=$(oc get pvc $pvc_name -n $NAMESPACE -o jsonpath='{.status.phase}')
   if [[ "$pvc_phase" != "Bound" ]]; then
     echo "Skipping $node - PVC not bound"
     pod_results+=("$node,$pod_name,PVC_NOT_BOUND")
     continue
   fi
-  
+
   echo "Creating test pod on node: $node"
-  
+
   # Delete if exists
   oc delete pod $pod_name -n $NAMESPACE --ignore-not-found=true >/dev/null 2>&1
-  
+
   # Create test pod
   cat <<EOF | oc apply -n $NAMESPACE -f -
 apiVersion: v1
@@ -253,7 +254,7 @@ spec:
     - |
       echo "Testing storage mount..."
       df -h /mnt/test
-      echo "Write test..." 
+      echo "Write test..."
       date > /mnt/test/test.txt && echo "✓ Write successful" || echo "✗ Write failed"
       ls -la /mnt/test/
       sleep 3600
@@ -270,15 +271,15 @@ spec:
       claimName: $pvc_name
   restartPolicy: Never
 EOF
-  
+
   # Wait for pod
   echo "  Waiting for pod to start (90s timeout)..."
   timeout=90
   elapsed=0
-  
+
   while [[ $elapsed -lt $timeout ]]; do
     phase=$(oc get pod $pod_name -n $NAMESPACE -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
-    
+
     if [[ "$phase" == "Running" ]]; then
       echo "  ✓ Pod running"
       sleep 3
@@ -291,20 +292,20 @@ EOF
       pod_results+=("$node,$pod_name,FAILED")
       break
     fi
-    
+
     sleep 5
     elapsed=$((elapsed + 5))
-    
+
     if [[ $((elapsed % 15)) -eq 0 ]]; then
       echo "    Still waiting... ($elapsed/$timeout seconds)"
     fi
   done
-  
+
   if [[ $elapsed -ge $timeout ]]; then
     echo "  ✗ Timeout waiting for pod"
     pod_results+=("$node,$pod_name,TIMEOUT")
   fi
-  
+
   echo ""
 done
 
@@ -321,15 +322,15 @@ successful_fc=0
 successful_pods=0
 
 for result in "${pvc_results[@]}"; do
-  [[ "$result" == *"SUCCESS"* ]] && ((successful_pvcs++))
+  [[ "$result" == *"SUCCESS"* ]] && ((successful_pvcs++)) || true
 done
 
 for result in "${fc_results[@]}"; do
-  [[ "$result" == *"SUCCESS"* ]] && ((successful_fc++))
+  [[ "$result" == *"SUCCESS"* ]] && ((successful_fc++)) || true
 done
 
 for result in "${pod_results[@]}"; do
-  [[ "$result" == *"SUCCESS"* ]] && ((successful_pods++))
+  [[ "$result" == *"SUCCESS"* ]] && ((successful_pods++)) || true
 done
 
 echo "Test Results:"
