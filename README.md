@@ -5,6 +5,8 @@
 This document describes a Fibre Channel (FC) connectivity issue observed in OpenShift/Kubernetes clusters using SAN storage arrays.  
 The problem occurs **only on nodes that have not yet had any LUN mapped**. Once a LUN has been successfully mapped, no intermittent connectivity losses are observed.
 
+There are reports that this problem also affects hypervisors such as VMWare.
+
 ## Problem Description
 
 When a new node in the cluster has no LUNs previously mapped, it may fail to establish initial connectivity with SAN storage volumes over Fibre Channel connections.  
