@@ -331,6 +331,7 @@ for node in $nodes; do
           echo "  Issuing LIP on $(basename $host)"
           echo 1 > $host/issue_lip 2>/dev/null || true
         fi
+        sleep 10
       done
       echo "  LIP rescan completed"
 
