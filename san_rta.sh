@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # FC Storage Test for OpenShift - Test FC storage connectivity and PVC mounting across all nodes
-# v0.5
+# v0.6
 #
 # Copyright (C) 2025 Linux Elite <info@linuxelite.com.br>
 #
@@ -104,7 +104,7 @@ confirm() {
 # =============================================================================
 
 echo "=================================================================================="
-echo "FC Storage Test Script v0.5"
+echo "FC Storage Test Script v0.6"
 echo "Cluster: $(oc whoami --show-server 2>/dev/null || echo 'Not logged in')"
 echo "User: $(oc whoami 2>/dev/null || echo 'Not logged in')"
 echo "Date: $(date)"
@@ -354,9 +354,19 @@ metadata:
 spec:
   nodeSelector:
     kubernetes.io/hostname: $node
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: test
     image: registry.access.redhat.com/ubi8/ubi-minimal:latest
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
     command: ["/bin/bash", "-c"]
     args:
     - |
@@ -573,9 +583,19 @@ metadata:
 spec:
   nodeSelector:
     kubernetes.io/hostname: $node
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: test
     image: registry.access.redhat.com/ubi8/ubi-minimal:latest
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
     command: ["/bin/bash", "-c"]
     args:
     - |
