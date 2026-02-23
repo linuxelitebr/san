@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # FC Storage Test for OpenShift - Test FC storage connectivity and PVC mounting across all nodes
-# v0.6
+# v0.7
 #
 # Copyright (C) 2025 Linux Elite <info@linuxelite.com.br>
 #
@@ -357,6 +357,7 @@ spec:
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
+    fsGroup: 1000
     seccompProfile:
       type: RuntimeDefault
   containers:
@@ -738,4 +739,10 @@ else
 fi
 
 echo ""
+
+if [[ $successful_pvcs -lt $total_nodes ]] || [[ $successful_pods -lt $total_nodes ]]; then
+    echo "Script completed with failures!"
+    exit 1
+fi
+
 echo "Script completed!"
